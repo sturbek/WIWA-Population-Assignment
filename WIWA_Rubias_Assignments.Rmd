@@ -1,0 +1,144 @@
+---
+title: "WIWA population assignment with Rubias"
+author: "Sheela P. Turbek"
+date: "2023-02-20"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r}
+library(tidyverse)
+library(rubias)
+library(gdata)
+```
+
+## Read in genotypes of reference breeding individuals
+
+```{r}
+WIWA_ref<- read.delim("Reference_Breeding_WIWA_Rubias_Input.txt",sep="\t") %>% distinct()
+WIWA_ref <- WIWA_ref %>% mutate_if(is.factor, as.character)
+
+dim(WIWA_ref)
+```
+
+## Read in genotypes of contemporary wintering individuals
+
+```{r}
+WIWA_mix_contemp <- read.delim("Contemporary_WIWA_Rubias_Input.txt",sep="\t") %>% distinct()
+WIWA_mix_contemp <- WIWA_mix_contemp %>% mutate_if(is.factor, as.character)
+
+dim(WIWA_mix_contemp)
+```
+
+## Perform assignment tests for contemporary individuals
+
+```{r}
+mix_estC <- infer_mixture(reference = WIWA_ref, mixture = WIWA_mix_contemp, gen_start_col = 5)
+
+# Read in metadata for wintering birds
+meta_contemp <- read.csv("Contemporary_WIWA_Metadata.csv") %>% rename(indiv="Field_ID")
+
+# Append metadata to assignment results
+rep_indiv_estsC <- mix_estC$indiv_posteriors %>% group_by(mixture_collection, indiv, repunit) %>% summarise(rep_pofz = sum(PofZ)) %>% left_join(meta_contemp) %>% dplyr::select(mixture_collection,indiv,repunit,rep_pofz, everything())
+
+# Spread the data so each individual is a row and the probability of assignment is spread across columns representing each genetic cluster
+contemp_assignments <- spread(data=rep_indiv_estsC,repunit,rep_pofz) %>% dplyr::select(indiv,mixture_collection,State,AK2Alberta,CoastalCA,Eastern,PacNorthwest,RockyMtn,Sierra,Latitude,Longitude) %>% mutate(Highest_PofZ=max(AK2Alberta,CoastalCA,Eastern,PacNorthwest,RockyMtn,Sierra))
+
+write.table(contemp_assignments,"contemp_assignments.txt",quote=F,row.names=F)
+contemp_assignments
+
+# Accept assignments if individuals are assigned to a genetic cluster with at least 80% probability
+contemp_assignment_certainty <- contemp_assignments %>% 
+  mutate(AK2Alberta=if_else(AK2Alberta >.8,1,0)) %>% 
+  mutate(CoastalCA=if_else(CoastalCA >.8,1,0)) %>%
+  mutate(Eastern=if_else(Eastern>.8,1,0)) %>% 
+  mutate(PacNorthwest=if_else(PacNorthwest>.8,1,0)) %>% 
+  mutate(RockyMtn=if_else(RockyMtn>.8,1,0)) %>% 
+  mutate(Sierra=if_else(Sierra>.8,1,0)) %>% 
+  mutate(sum=AK2Alberta+CoastalCA+Eastern+PacNorthwest+RockyMtn+Sierra) %>% 
+  mutate(assignment=if_else(AK2Alberta==1,"AK2Alberta",if_else(CoastalCA==1,"CoastalCA",if_else(Eastern==1,"Eastern",if_else(PacNorthwest==1,"PacNorthwest",if_else(RockyMtn==1,"RockyMtn",if_else(Sierra==1,"Sierra","uncertain")))))))
+
+contemp_assignment_certainty
+
+# Calculate z-score & missingness
+contemp_summary_stats <- mix_estC$indiv_posteriors %>%
+  group_by(indiv) %>%
+  top_n(1, PofZ) %>%
+  ungroup() %>% select(indiv, z_score, n_miss_loci) %>% rename(Rubias_Zscore=z_score)
+contemp_summary_stats$Prop_Missing_Loci <- contemp_summary_stats$n_miss_loci/96
+
+contemp_summary_stats
+
+contemp_results <- left_join(meta_contemp,contemp_summary_stats)
+contemp_results <- left_join(contemp_results,contemp_assignment_certainty)
+contemp_results <- contemp_results %>% dplyr::select(indiv:Collection_Date,Prop_Missing_Loci,assignment,Highest_PofZ,Rubias_Zscore) %>% rename(Field_ID=indiv,Rubias_Assignment=assignment,Rubias_Highest_PofZ=Highest_PofZ)
+
+write.csv(contemp_results,"WIWA_Contemporary_Results.csv",row.names=F)
+```
+
+## Remove three loci with high rates of missing data among the historical samples from the reference genotypes
+
+```{r}
+WIWA_ref_93loci <- WIWA_ref %>% select(!c(AK_PRBO_01.1:AK_PRBO_01.2,AK_PRBO_05.1:AK_PRBO_05.2,AK_PRBO_11.1:AK_PRBO_11.2))
+
+dim(WIWA_ref_93loci)
+```
+
+## Read in genotypes of historical wintering individuals
+
+```{r}
+WIWA_mix_histor <- read.delim("Historical_WIWA_Rubias_Input.txt",sep="\t") %>% distinct()
+WIWA_mix_histor <- WIWA_mix_histor %>% mutate_if(is.factor, as.character)
+
+dim(WIWA_mix_histor)
+```
+
+## Perform assignment tests for historical individuals
+
+```{r}
+mix_estC <- infer_mixture(reference = WIWA_ref_93loci, mixture = WIWA_mix_histor, gen_start_col = 5)
+
+# Read in metadata for wintering birds
+meta_histor <- read.csv("Historical_WIWA_Metadata.csv") %>% rename(indiv="Field_ID")
+
+# Append metadata to assignment results
+rep_indiv_estsC <- mix_estC$indiv_posteriors %>% group_by(mixture_collection, indiv, repunit) %>% summarise(rep_pofz = sum(PofZ)) %>% left_join(meta_histor) %>% dplyr::select(mixture_collection,indiv,repunit,rep_pofz, everything())
+
+# Spread the data so each individual is a row and the probability of assignment is spread across columns representing each genetic cluster
+histor_assignments <- spread(data=rep_indiv_estsC,repunit,rep_pofz) %>% dplyr::select(indiv,mixture_collection,State,AK2Alberta,CoastalCA,Eastern,PacNorthwest,RockyMtn,Sierra,Latitude,Longitude) %>% mutate(Highest_PofZ=max(AK2Alberta,CoastalCA,Eastern,PacNorthwest,RockyMtn,Sierra))
+
+write.table(histor_assignments,"histor_assignments.txt",quote=F,row.names=F)
+histor_assignments
+
+# Accept assignments if individuals are assigned to a genetic cluster with at least 80% probability
+histor_assignment_certainty <- histor_assignments %>% 
+  mutate(AK2Alberta=if_else(AK2Alberta >.8,1,0)) %>% 
+  mutate(CoastalCA=if_else(CoastalCA >.8,1,0)) %>%
+  mutate(Eastern=if_else(Eastern>.8,1,0)) %>% 
+  mutate(PacNorthwest=if_else(PacNorthwest>.8,1,0)) %>% 
+  mutate(RockyMtn=if_else(RockyMtn>.8,1,0)) %>% 
+  mutate(Sierra=if_else(Sierra>.8,1,0)) %>% 
+  mutate(sum=AK2Alberta+CoastalCA+Eastern+PacNorthwest+RockyMtn+Sierra) %>% 
+  mutate(assignment=if_else(AK2Alberta==1,"AK2Alberta",if_else(CoastalCA==1,"CoastalCA",if_else(Eastern==1,"Eastern",if_else(PacNorthwest==1,"PacNorthwest",if_else(RockyMtn==1,"RockyMtn",if_else(Sierra==1,"Sierra","uncertain"))))))) %>% 
+  mutate(PofZ=if_else(AK2Alberta==1,"AK2Alberta",if_else(CoastalCA==1,"CoastalCA",if_else(Eastern==1,"Eastern",if_else(PacNorthwest==1,"PacNorthwest",if_else(RockyMtn==1,"RockyMtn",if_else(Sierra==1,"Sierra","uncertain")))))))
+
+histor_assignment_certainty
+
+# Calculate z-score & missingness
+histor_summary_stats <- mix_estC$indiv_posteriors %>%
+  group_by(indiv) %>%
+  top_n(1, PofZ) %>%
+  ungroup() %>% select(indiv, z_score, n_miss_loci) %>% rename(Rubias_Zscore=z_score)
+histor_summary_stats$Prop_Missing_Loci <- histor_summary_stats$n_miss_loci/93
+
+histor_summary_stats
+
+histor_results <- left_join(meta_histor,histor_summary_stats)
+histor_results <- left_join(histor_results,histor_assignment_certainty)
+histor_results <- histor_results %>% dplyr::select(indiv:Collection_Date,Prop_Missing_Loci,assignment,Highest_PofZ,Rubias_Zscore) %>% rename(Field_ID=indiv,Rubias_Assignment=assignment,Rubias_Highest_PofZ=Highest_PofZ)
+
+write.csv(histor_results,"WIWA_Historical_Results.csv",row.names=F)
+```
+
+
