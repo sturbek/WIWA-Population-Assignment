@@ -43,7 +43,7 @@ meta_contemp <- read.csv("Contemporary_WIWA_Metadata.csv") %>% rename(indiv="Fie
 rep_indiv_estsC <- mix_estC$indiv_posteriors %>% group_by(mixture_collection, indiv, repunit) %>% summarise(rep_pofz = sum(PofZ)) %>% left_join(meta_contemp) %>% dplyr::select(mixture_collection,indiv,repunit,rep_pofz, everything())
 
 # Spread the data so each individual is a row and the probability of assignment is spread across columns representing each genetic cluster
-contemp_assignments <- spread(data=rep_indiv_estsC,repunit,rep_pofz) %>% dplyr::select(indiv,mixture_collection,State,AK2Alberta,CoastalCA,Eastern,PacNorthwest,RockyMtn,Sierra,Latitude,Longitude) %>% mutate(Highest_PofZ=max(AK2Alberta,CoastalCA,Eastern,PacNorthwest,RockyMtn,Sierra))
+contemp_assignments <- spread(data=rep_indiv_estsC,repunit,rep_pofz) %>% dplyr::select(indiv,mixture_collection,State,AK2Alberta,CoastalCA,Eastern,PacNorthwest,RockyMtn,Sierra,Latitude,Longitude) %>% rowwise() %>% mutate(Highest_PofZ=max(AK2Alberta,CoastalCA,Eastern,PacNorthwest,RockyMtn,Sierra))
 
 write.table(contemp_assignments,"contemp_assignments.txt",quote=F,row.names=F)
 contemp_assignments
@@ -106,7 +106,7 @@ meta_histor <- read.csv("Historical_WIWA_Metadata.csv") %>% rename(indiv="Field_
 rep_indiv_estsC <- mix_estC$indiv_posteriors %>% group_by(mixture_collection, indiv, repunit) %>% summarise(rep_pofz = sum(PofZ)) %>% left_join(meta_histor) %>% dplyr::select(mixture_collection,indiv,repunit,rep_pofz, everything())
 
 # Spread the data so each individual is a row and the probability of assignment is spread across columns representing each genetic cluster
-histor_assignments <- spread(data=rep_indiv_estsC,repunit,rep_pofz) %>% dplyr::select(indiv,mixture_collection,State,AK2Alberta,CoastalCA,Eastern,PacNorthwest,RockyMtn,Sierra,Latitude,Longitude) %>% mutate(Highest_PofZ=max(AK2Alberta,CoastalCA,Eastern,PacNorthwest,RockyMtn,Sierra))
+histor_assignments <- spread(data=rep_indiv_estsC,repunit,rep_pofz) %>% dplyr::select(indiv,mixture_collection,State,AK2Alberta,CoastalCA,Eastern,PacNorthwest,RockyMtn,Sierra,Latitude,Longitude) %>% rowwise() %>% mutate(Highest_PofZ=max(AK2Alberta,CoastalCA,Eastern,PacNorthwest,RockyMtn,Sierra))
 
 write.table(histor_assignments,"histor_assignments.txt",quote=F,row.names=F)
 histor_assignments
@@ -120,8 +120,7 @@ histor_assignment_certainty <- histor_assignments %>%
   mutate(RockyMtn=if_else(RockyMtn>.8,1,0)) %>% 
   mutate(Sierra=if_else(Sierra>.8,1,0)) %>% 
   mutate(sum=AK2Alberta+CoastalCA+Eastern+PacNorthwest+RockyMtn+Sierra) %>% 
-  mutate(assignment=if_else(AK2Alberta==1,"AK2Alberta",if_else(CoastalCA==1,"CoastalCA",if_else(Eastern==1,"Eastern",if_else(PacNorthwest==1,"PacNorthwest",if_else(RockyMtn==1,"RockyMtn",if_else(Sierra==1,"Sierra","uncertain"))))))) %>% 
-  mutate(PofZ=if_else(AK2Alberta==1,"AK2Alberta",if_else(CoastalCA==1,"CoastalCA",if_else(Eastern==1,"Eastern",if_else(PacNorthwest==1,"PacNorthwest",if_else(RockyMtn==1,"RockyMtn",if_else(Sierra==1,"Sierra","uncertain")))))))
+  mutate(assignment=if_else(AK2Alberta==1,"AK2Alberta",if_else(CoastalCA==1,"CoastalCA",if_else(Eastern==1,"Eastern",if_else(PacNorthwest==1,"PacNorthwest",if_else(RockyMtn==1,"RockyMtn",if_else(Sierra==1,"Sierra","uncertain")))))))
 
 histor_assignment_certainty
 
